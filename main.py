@@ -1,7 +1,6 @@
 import os 
 import json
 import hvac
-import argparse
 from importlib import import_module
 from dotenv import load_dotenv
 
