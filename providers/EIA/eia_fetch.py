@@ -3,16 +3,16 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 import pandas as pd
+from main import DataPipeline
 
 
-class EiaFetch:
-    def __init__(self, pipeline, config):
-        self.pipeline = pipeline
-        self.config = config
+class EiaFetch(DataPipeline): 
+    def __init__(self, vault_address, vault_token, secret_path, config):
+        super().__init__(vault_address, vault_token, secret_path, config)
 
-    def fetch_data(self, engine):
-        vault_secrets = self.pipeline.get_vault_credentials()
-        # engine = self.pipeline.create_source_engine()
+    def fetch_data(self):
+        vault_secrets = self.get_vault_credentials()
+        engine = self.database_engine(self.config['sourceDatabase'])
         table_name = self.config["tableName"]
         api_url = self.config["url"]
         columns_required = self.config["columns"]
