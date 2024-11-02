@@ -10,34 +10,33 @@ class EiaFetch:
         self.pipeline = pipeline
         self.config = config
 
-    def fetch_data(self):
+    def fetch_data(self, engine):
         vault_secrets = self.pipeline.get_vault_credentials()
-        engine = self.pipeline.create_source_engine()
+        # engine = self.pipeline.create_source_engine()
         table_name = self.config["tableName"]
         api_url = self.config["url"]
         columns_required = self.config["columns"]
         rename_value_col = self.config["renameValueCol"]
-        try:
-            offset = self.existing_data_count(table_name,engine)
 
-            params=self.config['params']
-            params['api_key'] = vault_secrets['API_KEY']
-            params['offset'] = offset
+        offset = self.existing_data_count(table_name,engine)
 
-            response = requests.get(self.config['url'],params )
-            data = response.json()
-            total_record = int(data['response']['total'])
-            print(total_record)
+        params=self.config['params']
+        params['api_key'] = vault_secrets['API_KEY']
+        params['offset'] = offset
 
-            list_praser=self.create_chunks(total_record,offset)
-            if len(list_praser) > 1:
-                for i in range(len(list_praser)-1):
-                    offsets = range(list_praser[i], list_praser[i+1], 5000)
-                    self.thread_executor(engine,offsets,api_url,params,table_name,columns_required,rename_value_col)
-            else:
-                print("No new records were discovered.")
-        except:
-            data = "NO DATA FOUND!!!!!"
+        response = requests.get(self.config['url'],params )
+        data = response.json()
+        total_record = int(data['response']['total'])
+        print(total_record)
+
+        list_praser=self.create_chunks(total_record,offset)
+        if len(list_praser) > 1:
+            for i in range(len(list_praser)-1):
+                offsets = range(list_praser[i], list_praser[i+1], 5000)
+                self.thread_executor(engine,offsets,api_url,params,table_name,columns_required,rename_value_col)
+        else:
+            print("No new records were discovered.")
+
         
 
 
@@ -128,11 +127,11 @@ class EiaFetch:
                     df = df[requiredCol].rename(columns={'value': repColNameWith})
 
                     with db_lock:
-                        # df.to_sql(table_name, en, if_exists='append', index=False)
+                        # df.to_sql(table_name, en, if_exists='append', index=False,chunksize=10000)
                         time.sleep(0.2 )
                         print(f"Data loaded successfully for {table_name} with offset {offset}")
 
                 except:
                     df = pd.DataFrame({'table': [table_name], 'offset': [offset], 'error': [response.status_code]})
-                    # df.to_sql('Failed_import_api', en, if_exists='append', index=False)
+                    # df.to_sql('Failed_import_api', en, if_exists='append', index=False,chunksize=10000)
                     print(f"An error occurred for {table_name} at Offset {offset}: {response.status_code}")
