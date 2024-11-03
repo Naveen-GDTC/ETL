@@ -52,7 +52,7 @@ class EiaFetch(DataPipeline):
         - int: The count of records in the table if it exists, or 0 if the table does not exist or an error occurs.
         """
         try:
-            query = f'SELECT count(*) FROM "{tableName}";'  
+            query = f'SELECT count(*) FROM {tableName};'  
             df = pd.read_sql(query, engine)
             print(f"present records count {df.iloc[0,0]}")
             return df.iloc[0,0]
@@ -125,13 +125,15 @@ class EiaFetch(DataPipeline):
                     df['value'] = pd.to_numeric(df['value'], errors='coerce')  
 
                     df = df[requiredCol].rename(columns={'value': repColNameWith})
+                    df["timestamp"] = pd.Timestamp.now()
 
                     with db_lock:
-                        # df.to_sql(table_name, en, if_exists='append', index=False,chunksize=10000)
+                        df.to_sql(table_name, en, if_exists='append', index=False)
                         time.sleep(0.2 )
                         print(f"Data loaded successfully for {table_name} with offset {offset}")
 
-                except:
+                except Exception as e:
+                    print(e)
                     df = pd.DataFrame({'table': [table_name], 'offset': [offset], 'error': [response.status_code]})
-                    # df.to_sql('Failed_import_api', en, if_exists='append', index=False,chunksize=10000)
+                    df.to_sql('Failed_import_api', en, if_exists='append', index=False)
                     print(f"An error occurred for {table_name} at Offset {offset}: {response.status_code}")

@@ -29,7 +29,8 @@ class DataPipeline:
     def database_engine(self, database):
         module = import_module(f'databases.{database}.{database.lower()}_engine')
         database_class = getattr(module, f'{database.capitalize()}Engine')
-        return database_class(self)
+        engine_instance = database_class(self)
+        return engine_instance.engine
 
 if __name__ == "__main__":
 
