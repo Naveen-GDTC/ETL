@@ -13,8 +13,6 @@ class DataPipeline:
         self.vault_token= vault_token
         self.secret_path= secret_path
         self.config = config
-        self.location= self.get_vault_credentials()
-        pass
 
     def get_vault_credentials(self):
         client = hvac.Client(url=self.vault_address, token=self.vault_token)
@@ -44,6 +42,6 @@ if __name__ == "__main__":
         with open(f"config\\{file}","r") as f:
             config = json.load(f)
 
-        pipeline = DataPipeline(vault_address, vault_token, secret_path,config)
-        provider = pipeline.load_provider(config['provider'])
-        provider.fetch_data()
+    pipeline = DataPipeline(vault_address, vault_token, secret_path,config)
+    provider = pipeline.load_provider(config['provider'])
+    provider.fetch_data()

@@ -12,30 +12,32 @@ class EiaFetch(DataPipeline):
 
     def fetch_data(self):
         vault_secrets = self.get_vault_credentials()
-        engine = self.database_engine(self.config['sourceDatabase'])
-        table_name = self.config["tableName"]
-        api_url = self.config["url"]
-        columns_required = self.config["columns"]
-        rename_value_col = self.config["renameValueCol"]
+        base_api_url = self.config["base_url"]
+        
+        for table in self.config["tables"]:
+            engine = self.database_engine(table['sourceDatabase'])
+            table_name = table["tableName"]
+            columns_required = table["columns"]
+            rename_value_col = table["renameValueCol"]
+            api_url = base_api_url+table["url"]
+            offset = self.existing_data_count(table_name,engine)
 
-        offset = self.existing_data_count(table_name,engine)
+            params=table['params']
+            params['api_key'] = vault_secrets['API_KEY']
+            params['offset'] = offset
 
-        params=self.config['params']
-        params['api_key'] = vault_secrets['API_KEY']
-        params['offset'] = offset
+            response = requests.get(api_url,params )
+            data = response.json()
+            total_record = int(data['response']['total'])
+            print(total_record)
 
-        response = requests.get(self.config['url'],params )
-        data = response.json()
-        total_record = int(data['response']['total'])
-        print(total_record)
-
-        list_praser=self.create_chunks(total_record,offset)
-        if len(list_praser) > 1:
-            for i in range(len(list_praser)-1):
-                offsets = range(list_praser[i], list_praser[i+1], 5000)
-                self.thread_executor(engine,offsets,api_url,params,table_name,columns_required,rename_value_col)
-        else:
-            print("No new records were discovered.")
+            list_praser=self.create_chunks(total_record,offset)
+            if len(list_praser) > 1:
+                for i in range(len(list_praser)-1):
+                    offsets = range(list_praser[i], list_praser[i+1], 5000)
+                    self.thread_executor(engine,offsets,api_url,params,table_name,columns_required,rename_value_col)
+            else:
+                print("No new records were discovered.")
 
         
 
@@ -127,6 +129,8 @@ class EiaFetch(DataPipeline):
                     df = df[requiredCol].rename(columns={'value': repColNameWith})
                     df["timestamp"] = pd.Timestamp.now()
 
+                    self.validate_column_types(df)
+
                     with db_lock:
                         df.to_sql(table_name, en, if_exists='append', index=False)
                         time.sleep(0.2 )
@@ -137,3 +141,23 @@ class EiaFetch(DataPipeline):
                     df = pd.DataFrame({'table': [table_name], 'offset': [offset], 'error': [response.status_code]})
                     df.to_sql('Failed_import_api', en, if_exists='append', index=False)
                     print(f"An error occurred for {table_name} at Offset {offset}: {response.status_code}")
+
+
+    def validate_column_types(self, df):
+        """
+        Validates the column types of the DataFrame.
+
+        Parameters:
+        - df (pd.DataFrame): The DataFrame to validate.
+
+        Raises:
+        - ValueError: If any column type is incorrect.
+        """
+        if not pd.api.types.is_string_dtype(df['period']):
+            raise ValueError("Column 'period' should be of string type.")
+        if not pd.api.types.is_string_dtype(df['stateId']):
+            raise ValueError("Column 'stateId' should be of string type.")
+        if not pd.api.types.is_string_dtype(df['fuelId']):
+            raise ValueError("Column 'fuelId' should be of string type.")
+        if not pd.api.types.is_numeric_dtype(df['co2_emission_MMT']):
+            raise ValueError("Column 'co2_emission_MMT' should be of numeric type.")
