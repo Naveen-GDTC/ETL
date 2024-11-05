@@ -22,7 +22,7 @@
         },
         {
             "sourceDatabase": "postgres",
-            "tableName": "ren_cap_api",
+            "tableName": "ren_cap_api_2",
             "url": "international/data/",
             "params": {
                 "frequency": "annual",

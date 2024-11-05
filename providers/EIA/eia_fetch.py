@@ -4,11 +4,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 import pandas as pd
 from main import DataPipeline
-
+import importlib
 
 class EiaFetch(DataPipeline): 
     def __init__(self, vault_address, vault_token, secret_path, config):
         super().__init__(vault_address, vault_token, secret_path, config)
+        self.transformations_folder = 'transformations'
 
     def fetch_data(self):
         vault_secrets = self.get_vault_credentials()
@@ -85,6 +86,27 @@ class EiaFetch(DataPipeline):
         
         return chunks
     
+    def load_transformation(self, table_name):
+        """
+        Dynamically load the transformation class for the given table.
+        
+        Parameters:
+        - table_name (str): The name of the table to load the transformation for.
+        
+        Returns:
+        - class: The transformation class for the table.
+        """
+        try:
+            module_name = f"{self.transformations_folder}.{table_name.lower()}_transform"
+            module = importlib.import_module(module_name) 
+            class_name = f"{table_name.capitalize()}Transform"
+            transformation_class = getattr(module, class_name)
+            transformation_instance = transformation_class()
+            return transformation_instance
+        except ModuleNotFoundError as e:
+            print(f"Transformation module not found for table '{table_name}': {e}")
+            return None
+        
     def thread_executor(self,en,offsets,apiUrl,params_template,table_name,requiredCol,repColNameWith,db_lock=threading.Lock()): # E
         """
         Executes API requests in parallel using a thread pool and inserts the 
@@ -125,11 +147,16 @@ class EiaFetch(DataPipeline):
                     df = data['response']['data']
                     df = pd.DataFrame(df)
                     df['value'] = pd.to_numeric(df['value'], errors='coerce')  
+                    transformation_class = self.load_transformation(table_name)
+                    if transformation_class:
+                        df = transformation_class.transform(df)
+                    else:
+                        pass
 
                     df = df[requiredCol].rename(columns={'value': repColNameWith})
-                    df["timestamp"] = pd.Timestamp.now()
+                    # df["timestamp"] = pd.Timestamp.now()
 
-                    self.validate_column_types(df)
+                    self.validate_column_types(df,repColNameWith)
 
                     with db_lock:
                         df.to_sql(table_name, en, if_exists='append', index=False)
@@ -143,7 +170,7 @@ class EiaFetch(DataPipeline):
                     print(f"An error occurred for {table_name} at Offset {offset}: {response.status_code}")
 
 
-    def validate_column_types(self, df):
+    def validate_column_types(self, df,col):
         """
         Validates the column types of the DataFrame.
 
@@ -153,11 +180,7 @@ class EiaFetch(DataPipeline):
         Raises:
         - ValueError: If any column type is incorrect.
         """
-        if not pd.api.types.is_string_dtype(df['period']):
+        if not pd.api.types.is_datetime64_dtype(df['period']):
             raise ValueError("Column 'period' should be of string type.")
-        if not pd.api.types.is_string_dtype(df['stateId']):
-            raise ValueError("Column 'stateId' should be of string type.")
-        if not pd.api.types.is_string_dtype(df['fuelId']):
-            raise ValueError("Column 'fuelId' should be of string type.")
-        if not pd.api.types.is_numeric_dtype(df['co2_emission_MMT']):
+        if not pd.api.types.is_numeric_dtype(df[col]):
             raise ValueError("Column 'co2_emission_MMT' should be of numeric type.")
