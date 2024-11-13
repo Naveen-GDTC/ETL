@@ -1,11 +1,11 @@
 from sqlalchemy import create_engine
 
 
-class PostgresEngine():
+class PostgresEngine:
     def __init__(self, pipeline):
         self.pipeline = pipeline
         self.engine = self.create_engine()
-        
+
     def create_engine(self):
         vault_secrets = self.pipeline.get_vault_credentials()
         return create_engine(
